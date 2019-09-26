@@ -25,8 +25,8 @@ from absl import flags
 import numpy as np
 import tensorflow as tf
 
-from official.datasets import movielens
 from official.recommendation import constants as rconst
+from official.recommendation import movielens
 from official.recommendation import ncf_input_pipeline
 from official.recommendation import neumf_model
 from official.utils.flags import core as flags_core
@@ -255,19 +255,6 @@ def create_feature_columns(params):
   return feature_columns
 
 
-def get_params_for_dataset(params):
-  """Creates a new params dict for the data pipeline."""
-
-  dataset_params = dict(params)
-  # Dataset needs to have a per core batch size for training and eval.
-  dataset_params["batch_size"] = (
-      params["global_batch_size"] // FLAGS.num_tpu_shards)
-  dataset_params["eval_batch_size"] = (
-      params["eval_global_batch_size"] // FLAGS.num_tpu_shards)
-
-  return dataset_params
-
-
 def main(_):
   """Train NCF model and evaluate its hit rate (HR) metric."""
 
@@ -284,8 +271,14 @@ def main(_):
     params["num_users"] = input_meta_data["num_users"]
     params["num_items"] = input_meta_data["num_items"]
 
-  num_train_steps = int(input_meta_data["num_train_steps"])
-  num_eval_steps = int(input_meta_data["num_eval_steps"])
+  # In PER_HOST_V2 input mode, the number of input batches that TPUEstimator
+  # uses per step is equal to the number of TPU cores being trained on. More
+  # over when it initializes the dataset it will ask for the batch size to be
+  # the per core batchsize (i.e. global batch size / number of TPU cores).
+  num_train_steps = (int(input_meta_data["num_train_steps"]) //
+                     FLAGS.num_tpu_shards)
+  num_eval_steps = (int(input_meta_data["num_eval_steps"]) //
+                    FLAGS.num_tpu_shards)
 
   def resize(x):
     x["user_id"] = tf.squeeze(x["user_id"], axis=[-1])

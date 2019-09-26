@@ -111,15 +111,20 @@ def build_model_graph(features, labels, is_training, params):
   is_gpu_inference = (not is_training and use_batched_nms)
   model_outputs = {}
 
-  if is_training:
-    if params['transpose_input']:
+  if is_training and params['transpose_input']:
+    if (params['backbone'].startswith('resnet') and
+        params['conv0_space_to_depth_block_size'] > 0):
       features['images'] = tf.transpose(features['images'], [2, 0, 1, 3])
+    else:
+      features['images'] = tf.transpose(features['images'], [3, 0, 1, 2])
+
   batch_size, image_height, image_width, _ = (
       features['images'].get_shape().as_list())
 
-  # Handles space-to-depth transform.
   conv0_space_to_depth_block_size = 0
-  if is_training:
+  if (is_training and
+      (params['backbone'].startswith('resnet') and
+       params['conv0_space_to_depth_block_size'] > 0)):
     conv0_space_to_depth_block_size = params['conv0_space_to_depth_block_size']
     image_height *= conv0_space_to_depth_block_size
     image_width *= conv0_space_to_depth_block_size
@@ -528,11 +533,10 @@ def _model_fn(features, labels, mode, params, variable_filter_fn=None):
       if grad is not None and ('beta' in var.name or 'bias' in var.name):
         grad = 2.0 * grad
       grads_and_vars.append((grad, var))
-    minimize_op = optimizer.apply_gradients(grads_and_vars,
-                                            global_step=global_step)
 
     with tf.control_dependencies(update_ops):
-      train_op = minimize_op
+      train_op = optimizer.apply_gradients(
+          grads_and_vars, global_step=global_step)
 
     if params['use_host_call']:
       def host_call_fn(global_step, total_loss, total_rpn_loss, rpn_score_loss,

@@ -46,10 +46,15 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     'model', default='retinanet',
-    help='Model to run: Currently only support `retinanet`.')
+    help='Model to run: `retinanet` or `shapemask`.')
 
 flags.DEFINE_integer(
     'num_cores', default=8, help='Number of TPU cores for training.')
+
+flags.DEFINE_string(
+    'tpu_job_name', None,
+    'Name of TPU worker binary. Only necessary if job name is changed from'
+    ' default tpu_worker.')
 
 FLAGS = flags.FLAGS
 
@@ -80,6 +85,7 @@ def main(argv):
           'tpu_zone': FLAGS.tpu_zone,
           'gcp_project': FLAGS.gcp_project,
       },
+      'tpu_job_name': FLAGS.tpu_job_name,
       'use_tpu': FLAGS.use_tpu,
       'model_dir': FLAGS.model_dir,
       'train': {
@@ -115,7 +121,7 @@ def main(argv):
       executor.prepare_evaluation()
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size)
+          params.eval.eval_samples // params.eval.eval_batch_size)
 
   elif FLAGS.mode == 'eval':
     def terminate_eval():
@@ -136,7 +142,7 @@ def main(argv):
       try:
         executor.evaluate(
             eval_input_fn,
-            params.eval.eval_samples // params.predict.predict_batch_size, ckpt)
+            params.eval.eval_samples // params.eval.eval_batch_size, ckpt)
 
         if current_step >= params.train.total_steps:
           tf.logging.info('Evaluation finished after training step %d' %
@@ -161,7 +167,7 @@ def main(argv):
       executor.train(train_input_fn, current_cycle_last_train_step)
       executor.evaluate(
           eval_input_fn,
-          params.eval.eval_samples // params.predict.predict_batch_size)
+          params.eval.eval_samples // params.eval.eval_batch_size)
   else:
     tf.logging.info('Mode not found.')
 
